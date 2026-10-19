@@ -1,0 +1,56 @@
+{
+  "input": "/mnt/data/image(20261019-184655).png",
+  "dimensions": {
+    "width": 1254,
+    "height": 1254
+  },
+  "explanation": "Offsets indicam as posições das FRONTEIRAS (x mod size, y mod size). Pontuações são heurísticas; compare visualmente o preview. Quando não há uma grade global consistente, nenhum método é perfeito.",
+  "grids": [
+    {
+      "size": 15,
+      "offsetX": 0,
+      "offsetY": 13,
+      "score": 1.7838812680675225,
+      "scoreX": 1.745967962930066,
+      "scoreY": 1.8226178521751348,
+      "contrastX": 0.9294228694092597,
+      "contrastY": 0.9775797564776224
+    },
+    {
+      "size": 30,
+      "offsetX": 0,
+      "offsetY": 28,
+      "score": 1.5095156930392761,
+      "scoreX": 1.357344765296912,
+      "scoreY": 1.6787463920659877,
+      "contrastX": 1.1521311979840916,
+      "contrastY": 1.4357418266715596
+    }
+  ],
+  "variants": [
+    {
+      "path": "/mnt/data/pixel-normalizer-example/grade-1-15px-dominante.png",
+      "label": "Grade 1 (15px) — dominante"
+    },
+    {
+      "path": "/mnt/data/pixel-normalizer-example/grade-1-15px-mediana.png",
+      "label": "Grade 1 (15px) — mediana"
+    },
+    {
+      "path": "/mnt/data/pixel-normalizer-example/grade-1-15px-centro.png",
+      "label": "Grade 1 (15px) — centro"
+    },
+    {
+      "path": "/mnt/data/pixel-normalizer-example/grade-2-30px-dominante.png",
+      "label": "Grade 2 (30px) — dominante"
+    },
+    {
+      "path": "/mnt/data/pixel-normalizer-example/grade-2-30px-mediana.png",
+      "label": "Grade 2 (30px) — mediana"
+    },
+    {
+      "path": "/mnt/data/pixel-normalizer-example/grade-2-30px-centro.png",
+      "label": "Grade 2 (30px) — centro"
+    }
+  ]
+}
