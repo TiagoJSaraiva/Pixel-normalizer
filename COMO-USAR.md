@@ -8,6 +8,7 @@ Um único script (`pixel-normalizer.ts`) que tenta detectar o tamanho e o desloc
 bun install
 bun run pixel-normalizer.ts "minha-imagem.png"
 bun run pixel-normalizer.ts "minha-imagem.png" --out ./forja
+bun run pixel-normalizer.ts "minha-imagem.png" --cell 8
 ```
 
 Coloque as imagens em `input/`. O argumento da imagem é relativo a essa pasta; por exemplo, `"minha-imagem.png"` lê `input/minha-imagem.png`. Subpastas também são aceitas, como `"personagens/heroi.png"`, desde que permaneçam dentro de `input/`.
@@ -28,7 +29,14 @@ Opções disponíveis:
 ```sh
 bun run pixel-normalizer.ts --help
 bun run pixel-normalizer.ts "minha-imagem.png" --out ./resultado --max-cell 160 --grids 3
+bun run pixel-normalizer.ts "minha-imagem.png" --cell 8 --out ./resultado
 ```
+
+Use `--cell <n>` para fixar manualmente o tamanho das células, em pixels reais.
+O valor deve ser um inteiro positivo. O script ainda estima os deslocamentos
+horizontal e vertical da grade e gera somente as três variantes dessa escala.
+As dimensões da imagem são preservadas, inclusive quando as células nas bordas
+ficam parciais. Sem `--cell`, o tamanho continua sendo detectado automaticamente.
 
 O script gera, na pasta de saída:
 
@@ -36,7 +44,7 @@ O script gera, na pasta de saída:
 - `grade-*-dominante.png`: cor do agrupamento de cores mais frequente em cada célula.
 - `grade-*-mediana.png`: mediana de cada canal na célula.
 - `grade-*-centro.png`: a cor do pixel do centro da célula.
-- `report.json`: grade estimada, deslocamentos e pontuações heurísticas.
+- `report.json`: modo de tamanho da grade, deslocamentos e pontuações heurísticas.
 
 ## Como funciona
 

@@ -3,7 +3,7 @@
  * Requisitos: Bun + Sharp  |  bun add sharp
  * Exemplo: bun run pixel-normalizer.ts "imagem.png" --out ./resultado
  *
- * Gera: variantes (dominante, mediana, centro) para as duas melhores grades,
+ * Gera: variantes (dominante, mediana, centro) para as grades selecionadas,
  * preview comparativo e report.json. Tudo neste arquivo, sem serviços externos.
  */
 import sharp, { type OverlayOptions } from "sharp";
@@ -15,6 +15,7 @@ interface Options {
   input: string;
   out: string;
   overwrite: boolean;
+  cell?: number;
   minCell: number;
   maxCell: number;
   grids: number;
@@ -57,6 +58,7 @@ Opções:
   -o, --overwrite     Recria a pasta base de saída, removendo seu conteúdo
   --min-cell <n>      Menor pixel lógico testado (padrão: 3)
   --max-cell <n>      Maior pixel lógico testado (padrão: 128)
+  --cell <n>          Fixa o tamanho da célula e estima os deslocamentos
   --grids <n>         Quantidade de grades alternativas (padrão: 2)
   --preview <n>       Largura de cada miniatura (padrão: 360)
 
@@ -79,7 +81,13 @@ function parseOptions(argv: string[]): Options {
     grids: 2,
     previewWidth: 360,
   };
-  const numeric = new Set(["--min-cell", "--max-cell", "--grids", "--preview"]);
+  const numeric = new Set([
+    "--cell",
+    "--min-cell",
+    "--max-cell",
+    "--grids",
+    "--preview",
+  ]);
   for (let i = 1; i < argv.length; i++) {
     const key = argv[i];
     if (key === "-o" || key === "--overwrite") {
@@ -94,8 +102,13 @@ function parseOptions(argv: string[]): Options {
     if (key === "--out") opts.out = value;
     else if (numeric.has(key)) {
       const n = Number(value);
-      if (!Number.isInteger(n) || n < 1)
+      if (
+        !Number.isInteger(n) ||
+        n < 1 ||
+        (key === "--cell" && !Number.isSafeInteger(n))
+      )
         throw new Error(`Valor inválido em ${key}: ${value}`);
+      if (key === "--cell") opts.cell = n;
       if (key === "--min-cell") opts.minCell = n;
       if (key === "--max-cell") opts.maxCell = n;
       if (key === "--grids") opts.grids = Math.min(5, n);
@@ -235,8 +248,12 @@ function edgeProfiles(img: RawImage): { x: Float64Array; y: Float64Array } {
 }
 
 function fitAxis(profile: Float64Array, size: number): AxisFit {
-  const sums = new Float64Array(size);
-  const counts = new Uint32Array(size);
+  // Offsets maiores que o eixo não podem ter bordas observadas na imagem.
+  // Limitar os candidatos também permite --cell maior que as dimensões sem
+  // alocar um vetor proporcional ao valor informado.
+  const offsetCount = Math.min(size, profile.length);
+  const sums = new Float64Array(offsetCount);
+  const counts = new Uint32Array(offsetCount);
   let total = 0,
     n = 0,
     sumSq = 0;
@@ -252,7 +269,7 @@ function fitAxis(profile: Float64Array, size: number): AxisFit {
   const std = Math.sqrt(Math.max(1e-8, sumSq / n - mean * mean));
   let best = 0;
   let peak = -Infinity;
-  for (let offset = 0; offset < size; offset++) {
+  for (let offset = 0; offset < offsetCount; offset++) {
     const avg = counts[offset] ? sums[offset] / counts[offset] : 0;
     if (avg > peak) {
       best = offset;
@@ -270,14 +287,20 @@ function fitAxis(profile: Float64Array, size: number): AxisFit {
 
 function detectGrids(img: RawImage, options: Options): GridFit[] {
   const edges = edgeProfiles(img);
-  const upper = Math.min(
-    options.maxCell,
-    Math.floor(Math.min(img.width, img.height) / 5),
-  );
-  if (upper < options.minCell)
-    throw new Error("Nenhum tamanho de pixel possível para essa imagem");
+  const sizes: number[] = [];
+  if (options.cell !== undefined) {
+    sizes.push(options.cell);
+  } else {
+    const upper = Math.min(
+      options.maxCell,
+      Math.floor(Math.min(img.width, img.height) / 5),
+    );
+    if (upper < options.minCell)
+      throw new Error("Nenhum tamanho de pixel possível para essa imagem");
+    for (let size = options.minCell; size <= upper; size++) sizes.push(size);
+  }
   const fits: GridFit[] = [];
-  for (let size = options.minCell; size <= upper; size++) {
+  for (const size of sizes) {
     const x = fitAxis(edges.x, size);
     const y = fitAxis(edges.y, size);
     const repeatedBoundaries = Math.min(img.width, img.height) / size;
@@ -296,6 +319,10 @@ function detectGrids(img: RawImage, options: Options): GridFit[] {
       contrastY: y.contrast,
     });
   }
+  // No modo manual, o usuário escolheu a escala; a pontuação continua sendo
+  // usada para os offsets, mas não há seleção de grades alternativas.
+  if (options.cell !== undefined) return fits;
+
   fits.sort((a, b) => b.score - a.score);
   // Evita grades quase iguais. Também mantém alternativas com escala
   // substancialmente diferente, úteis quando a IA misturou blocos.
@@ -497,7 +524,11 @@ async function main(): Promise<void> {
   const grids = detectGrids(image, opts);
   const outputPath = await reserveOutputDirectory(outputBasePath, opts.overwrite);
   console.log(`Imagem: ${image.width}x${image.height}`);
-  console.log("Grades estimadas:");
+  console.log(
+    opts.cell === undefined
+      ? "Grades estimadas:"
+      : "Grade definida manualmente (offsets estimados):",
+  );
   grids.forEach((grid, i) =>
     console.log(
       ` ${i + 1}. pixel ${grid.size}x${grid.size}, ` +
@@ -520,7 +551,10 @@ async function main(): Promise<void> {
         .toFile(path);
       const item = {
         path,
-        label: `Grade ${index + 1} (${grid.size}px) — ${strategy}`,
+        label:
+          opts.cell === undefined
+            ? `Grade ${index + 1} (${grid.size}px) — ${strategy}`
+            : `Grade manual (${grid.size}px) — ${strategy}`,
       };
       files.push(item);
       previewItems.push(item);
@@ -531,9 +565,14 @@ async function main(): Promise<void> {
     input: inputPath,
     dimensions: { width: image.width, height: image.height },
     explanation:
+      (opts.cell === undefined
+        ? "O tamanho da grade foi detectado automaticamente. "
+        : `O tamanho da grade foi definido manualmente como ${opts.cell}px. `) +
       "Offsets indicam as posições das FRONTEIRAS (x mod size, y mod size). " +
       "Pontuações são heurísticas; compare visualmente o preview. " +
       "Quando não há uma grade global consistente, nenhum método é perfeito.",
+    cellSizeMode: opts.cell === undefined ? "automatic" : "manual",
+    manualCellSize: opts.cell ?? null,
     grids,
     variants: files.map((f) => ({ path: resolve(f.path), label: f.label })),
   };
