@@ -23,6 +23,14 @@ Coloque uma imagem em `input/` e informe o caminho relativo a essa pasta:
 bun run pixel-normalizer.ts "minha-imagem.png"
 ```
 
+Para processar todas as imagens compatíveis diretamente em `input/`, omita o nome. Os arquivos são processados na ordem retornada pela leitura da pasta; subpastas são ignoradas. As extensões aceitas são `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tif`, `.tiff`, `.ico`, `.webp`, `.avif`, `.heic` e `.heif`, sem diferenciar maiúsculas de minúsculas.
+
+```sh
+bun run pixel-normalizer.ts --cell 8
+```
+
+Cada imagem recebe sua própria pasta de saída, na mesma ordem: `normalized-output`, `normalized-output-2` e assim por diante. Opções como `--cell`, `--grids` e `--preview` valem para todas as imagens do lote. Se não houver imagens compatíveis diretamente em `input/`, o comando informa um erro.
+
 Subpastas são aceitas desde que a imagem permaneça dentro de `input/`:
 
 ```sh
@@ -40,6 +48,8 @@ bun run pixel-normalizer.ts "minha-imagem.png" --out "forja"
 ```
 
 Se a pasta de saída escolhida já existir, o programa cria uma pasta numerada para não substituí-la. Ele usa o próximo número após o maior sufixo numérico existente; por exemplo, se existir `output/forja-5/`, a próxima execução usará `output/forja-6/`.
+
+No modo em lote, a mesma regra é aplicada uma vez por imagem, mantendo a ordem da listagem de `input/`. Com `--out "forja"`, as pastas serão `forja`, `forja-2` e assim por diante quando esses nomes estiverem disponíveis. `--overwrite` não é aceito no modo em lote.
 
 Para limpar e recriar exatamente a pasta de saída escolhida, use `--overwrite` ou `-o`:
 
@@ -63,13 +73,15 @@ Por exemplo, um arquivo pode se chamar `grade-1-8px-dominante.png`. No modo auto
 ## Opções do comando
 
 ```text
-bun run pixel-normalizer.ts <imagem> [opções]
+bun run pixel-normalizer.ts [<imagem>] [opções]
 ```
+
+O argumento da imagem é opcional. Sem ele, o comando processa os arquivos de imagem compatíveis diretamente em `input/`.
 
 | Opção | Padrão | Descrição |
 | --- | --- | --- |
 | `--out <pasta>` | `normalized-output` | Caminho de saída relativo a `output/`. |
-| `-o`, `--overwrite` | desativado | Limpa e recria a pasta de saída indicada. |
+| `-o`, `--overwrite` | desativado | Limpa e recria a pasta de saída indicada para uma imagem; indisponível no modo em lote. |
 | `--min-cell <n>` | `3` | Menor tamanho de célula lógica considerado na detecção automática. |
 | `--max-cell <n>` | `128` | Maior tamanho de célula lógica considerado na detecção automática. |
 | `--cell <n>` | automático | Define o tamanho da célula manualmente; o programa ainda estima os deslocamentos horizontal e vertical. |
@@ -84,6 +96,9 @@ Exemplos:
 ```sh
 # Definir manualmente o tamanho da célula
 bun run pixel-normalizer.ts "minha-imagem.png" --cell 8
+
+# Processar todas as imagens compatíveis diretamente em input/
+bun run pixel-normalizer.ts --cell 8
 
 # Ampliar a faixa automática e gerar três grades
 bun run pixel-normalizer.ts "minha-imagem.png" --min-cell 2 --max-cell 160 --grids 3

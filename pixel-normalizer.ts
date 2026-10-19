@@ -8,11 +8,20 @@
  */
 import sharp, { type OverlayOptions } from "sharp";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 
 interface Options {
-  input: string;
+  input?: string;
   out: string;
   overwrite: boolean;
   cell?: number;
@@ -47,15 +56,31 @@ type Strategy = "dominante" | "mediana" | "centro";
 const PROJECT_ROOT = dirname(fileURLToPath(import.meta.url));
 const INPUT_ROOT = resolve(PROJECT_ROOT, "input");
 const OUTPUT_ROOT = resolve(PROJECT_ROOT, "output");
+// Keep in sync with the image formats ignored in input/.gitignore.
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".tif",
+  ".tiff",
+  ".ico",
+  ".webp",
+  ".avif",
+  ".heic",
+  ".heif",
+]);
 
 function printHelp(): void {
-  console.log(`Uso: bun run pixel-normalizer.ts <imagem> [opções]
+  console.log(`Uso: bun run pixel-normalizer.ts [<imagem>] [opções]
 
-<imagem> é um caminho relativo à pasta ./input.
+<imagem> é um caminho relativo à pasta ./input. Sem esse argumento, todas as
+imagens compatíveis diretamente em ./input são processadas em sequência.
 
 Opções:
   --out <pasta>       Pasta relativa a ./output (padrão: normalized-output)
-  -o, --overwrite     Recria a pasta base de saída, removendo seu conteúdo
+  -o, --overwrite     Recria a pasta de saída (indisponível no modo em lote)
   --min-cell <n>      Menor pixel lógico testado (padrão: 3)
   --max-cell <n>      Maior pixel lógico testado (padrão: 128)
   --cell <n>          Fixa o tamanho da célula e estima os deslocamentos
@@ -68,12 +93,11 @@ Requisitos: bun add sharp
 }
 
 function parseOptions(argv: string[]): Options {
-  if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
+  if (argv.includes("--help") || argv.includes("-h")) {
     printHelp();
     process.exit(0);
   }
   const opts: Options = {
-    input: argv[0],
     out: "normalized-output",
     overwrite: false,
     minCell: 3,
@@ -88,19 +112,20 @@ function parseOptions(argv: string[]): Options {
     "--grids",
     "--preview",
   ]);
-  for (let i = 1; i < argv.length; i++) {
+  for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (key === "-o" || key === "--overwrite") {
       opts.overwrite = true;
       continue;
     }
-    if (key !== "--out" && !numeric.has(key))
-      throw new Error(`Opção desconhecida: ${key}`);
-    const value = argv[++i];
-    if (!value || value.startsWith("--") || value === "-o")
-      throw new Error(`Falta valor para ${key}`);
-    if (key === "--out") opts.out = value;
-    else if (numeric.has(key)) {
+    if (key === "--out" || numeric.has(key)) {
+      const value = argv[++i];
+      if (!value || value.startsWith("--") || value === "-o")
+        throw new Error(`Falta valor para ${key}`);
+      if (key === "--out") {
+        opts.out = value;
+        continue;
+      }
       const n = Number(value);
       if (
         !Number.isInteger(n) ||
@@ -114,11 +139,28 @@ function parseOptions(argv: string[]): Options {
       if (key === "--grids") opts.grids = Math.min(5, n);
       if (key === "--preview")
         opts.previewWidth = Math.max(100, Math.min(600, n));
+      continue;
     }
+
+    if (key.startsWith("-")) throw new Error(`Opção desconhecida: ${key}`);
+    if (opts.input !== undefined)
+      throw new Error(`Argumento inesperado: ${key}`);
+    opts.input = key;
   }
   if (opts.minCell > opts.maxCell)
     throw new Error("--min-cell deve ser <= --max-cell");
   return opts;
+}
+
+async function listInputImages(): Promise<string[]> {
+  const entries = await readdir(INPUT_ROOT, { withFileTypes: true });
+  return entries
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        IMAGE_EXTENSIONS.has(extname(entry.name).toLowerCase()),
+    )
+    .map((entry) => join(INPUT_ROOT, entry.name));
 }
 
 function resolveInside(root: string, userPath: string, label: string): string {
@@ -516,14 +558,18 @@ async function savePreview(
     .toFile(dest);
 }
 
-async function main(): Promise<void> {
-  const opts = parseOptions(process.argv.slice(2));
-  const inputPath = resolveInside(INPUT_ROOT, opts.input, "entrada");
-  const outputBasePath = resolveInside(OUTPUT_ROOT, opts.out, "saída");
+async function processImage(
+  inputPath: string,
+  opts: Options,
+  outputBasePath: string,
+): Promise<void> {
   const image = await loadImage(inputPath);
   const grids = detectGrids(image, opts);
-  const outputPath = await reserveOutputDirectory(outputBasePath, opts.overwrite);
-  console.log(`Imagem: ${image.width}x${image.height}`);
+  const outputPath = await reserveOutputDirectory(
+    outputBasePath,
+    opts.overwrite,
+  );
+  console.log(`\nImagem: ${basename(inputPath)} (${image.width}x${image.height})`);
   console.log(
     opts.cell === undefined
       ? "Grades estimadas:"
@@ -585,6 +631,28 @@ async function main(): Promise<void> {
   console.log(
     `\nPronto. Abra ${join(outputPath, "comparativo.png")} para escolher a variante.`,
   );
+}
+
+async function main(): Promise<void> {
+  const opts = parseOptions(process.argv.slice(2));
+  if (opts.input === undefined && opts.overwrite)
+    throw new Error("--overwrite não é compatível com o processamento em lote.");
+
+  const outputBasePath = resolveInside(OUTPUT_ROOT, opts.out, "saída");
+  if (opts.input !== undefined) {
+    const inputPath = resolveInside(INPUT_ROOT, opts.input, "entrada");
+    await processImage(inputPath, opts, outputBasePath);
+    return;
+  }
+
+  const inputPaths = await listInputImages();
+  if (inputPaths.length === 0)
+    throw new Error(
+      "Nenhuma imagem compatível foi encontrada diretamente em ./input.",
+    );
+
+  for (const inputPath of inputPaths)
+    await processImage(inputPath, opts, outputBasePath);
 }
 
 main().catch((err) => {

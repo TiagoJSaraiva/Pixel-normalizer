@@ -23,6 +23,14 @@ Put an image in `input/`, then pass its path relative to that folder:
 bun run pixel-normalizer.ts "my-image.png"
 ```
 
+To process every supported image directly inside `input/`, omit the image name. Files are processed in the order returned by the directory listing; subdirectories are skipped. The supported extensions are `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tif`, `.tiff`, `.ico`, `.webp`, `.avif`, `.heic`, and `.heif` (case-insensitive).
+
+```sh
+bun run pixel-normalizer.ts --cell 8
+```
+
+Each image gets its own output folder in that order: `normalized-output`, `normalized-output-2`, and so on. Options such as `--cell`, `--grids`, and `--preview` apply to every image in the batch. If no supported image is found directly inside `input/`, the command reports an error.
+
 Subdirectories are supported as long as the image stays inside `input/`:
 
 ```sh
@@ -40,6 +48,8 @@ bun run pixel-normalizer.ts "my-image.png" --out "forge"
 ```
 
 If the requested output folder already exists, the program chooses a numbered folder to avoid replacing it. It uses the next number after the highest existing numeric suffix; for example, if `output/forge-5/` exists, the next run uses `output/forge-6/`.
+
+In batch mode, the same rule is applied once per image, preserving the input listing order. With `--out "forge"`, the folders are named `forge`, `forge-2`, and so on when those names are available. `--overwrite` is rejected in batch mode.
 
 To clear and recreate the exact requested output folder, use `--overwrite` or `-o`:
 
@@ -63,13 +73,15 @@ For example, a result can be named `grade-1-8px-dominante.png`. In automatic mod
 ## Command options
 
 ```text
-bun run pixel-normalizer.ts <image> [options]
+bun run pixel-normalizer.ts [<image>] [options]
 ```
+
+The image argument is optional. Without it, the command processes supported image files directly in `input/`.
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `--out <folder>` | `normalized-output` | Output path relative to `output/`. |
-| `-o`, `--overwrite` | off | Clear and recreate the exact output folder. |
+| `-o`, `--overwrite` | off | Clear and recreate the exact output folder for one image; unavailable in batch mode. |
 | `--min-cell <n>` | `3` | Smallest logical cell size considered during automatic detection. |
 | `--max-cell <n>` | `128` | Largest logical cell size considered during automatic detection. |
 | `--cell <n>` | automatic | Set a cell size manually; the program still estimates horizontal and vertical offsets. |
@@ -84,6 +96,9 @@ Examples:
 ```sh
 # Choose a cell size manually
 bun run pixel-normalizer.ts "my-image.png" --cell 8
+
+# Process every supported image directly in input/
+bun run pixel-normalizer.ts --cell 8
 
 # Search a wider automatic range and produce three grids
 bun run pixel-normalizer.ts "my-image.png" --min-cell 2 --max-cell 160 --grids 3

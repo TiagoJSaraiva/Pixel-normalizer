@@ -1,8 +1,16 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import sharp from "sharp";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { join, relative } from "node:path";
+import { extname, join, relative } from "node:path";
 
 const projectRoot = import.meta.dir;
 const inputRoot = join(projectRoot, "input");
@@ -12,11 +20,27 @@ const inputArgument = relative(inputRoot, inputPath);
 const manualOutputName = `.cell-tests-${crypto.randomUUID()}`;
 const automaticOutputName = `${manualOutputName}-automatic`;
 const largeCellOutputName = `${manualOutputName}-large`;
+const batchProjectDirectory = join(
+  projectRoot,
+  `.batch-tests-${crypto.randomUUID()}`,
+);
+const emptyBatchProjectDirectory = join(
+  projectRoot,
+  `.batch-empty-tests-${crypto.randomUUID()}`,
+);
+const batchScriptPath = join(batchProjectDirectory, "pixel-normalizer.ts");
+const emptyBatchScriptPath = join(
+  emptyBatchProjectDirectory,
+  "pixel-normalizer.ts",
+);
 
-function runCli(args: string[]) {
+function runCli(
+  args: string[],
+  scriptPath = join(projectRoot, "pixel-normalizer.ts"),
+) {
   return spawnSync(
     process.execPath,
-    ["run", join(projectRoot, "pixel-normalizer.ts"), ...args],
+    ["run", scriptPath, ...args],
     { encoding: "utf8" },
   );
 }
@@ -57,6 +81,23 @@ beforeAll(async () => {
   await sharp(pixels, { raw: { width, height, channels: 4 } })
     .png()
     .toFile(inputPath);
+
+  const batchInputDirectory = join(batchProjectDirectory, "input");
+  await mkdir(join(batchInputDirectory, "nested"), { recursive: true });
+  await mkdir(join(batchProjectDirectory, "output"), { recursive: true });
+  await copyFile(join(projectRoot, "pixel-normalizer.ts"), batchScriptPath);
+  await copyFile(inputPath, join(batchInputDirectory, "first.png"));
+  await copyFile(inputPath, join(batchInputDirectory, "second.PNG"));
+  await copyFile(inputPath, join(batchInputDirectory, "ignored.txt"));
+  await copyFile(inputPath, join(batchInputDirectory, "nested", "nested.png"));
+  await mkdir(join(batchInputDirectory, "directory.png"));
+
+  const emptyInputDirectory = join(emptyBatchProjectDirectory, "input");
+  await mkdir(join(emptyInputDirectory, "nested"), { recursive: true });
+  await mkdir(join(emptyBatchProjectDirectory, "output"), { recursive: true });
+  await copyFile(join(projectRoot, "pixel-normalizer.ts"), emptyBatchScriptPath);
+  await writeFile(join(emptyInputDirectory, "notes.txt"), "no images");
+  await copyFile(inputPath, join(emptyInputDirectory, "nested", "nested.png"));
 });
 
 afterAll(async () => {
@@ -71,6 +112,8 @@ afterAll(async () => {
       force: true,
     });
   }
+  await rm(batchProjectDirectory, { recursive: true, force: true });
+  await rm(emptyBatchProjectDirectory, { recursive: true, force: true });
 });
 
 describe("--cell", () => {
@@ -193,5 +236,114 @@ describe("--cell", () => {
     const help = runCli(["--help"]);
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("--cell <n>");
+    expect(help.stdout).toContain("[<imagem>]");
+  });
+});
+
+describe("modo em lote", () => {
+  test("processes direct images in directory order and ignores other entries", async () => {
+    const inputDirectory = join(batchProjectDirectory, "input");
+    const imageExtensions = new Set([
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".bmp",
+      ".tif",
+      ".tiff",
+      ".ico",
+      ".webp",
+      ".avif",
+      ".heic",
+      ".heif",
+    ]);
+    const expectedInputs = (await readdir(inputDirectory, {
+      withFileTypes: true,
+    }))
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          imageExtensions.has(extname(entry.name).toLowerCase()),
+      )
+      .map((entry) => join(inputDirectory, entry.name));
+
+    expect(expectedInputs).toHaveLength(2);
+    const expectedOutputNames = expectedInputs.map((_, index) =>
+      index === 0 ? "normalized-output" : `normalized-output-${index + 1}`,
+    );
+    const result = runCli(["--cell", "8", "--preview", "100"], batchScriptPath);
+    expect(result.status).toBe(0);
+
+    const outputRoot = join(batchProjectDirectory, "output");
+    for (const [index, expectedInput] of expectedInputs.entries()) {
+      const outputName = expectedOutputNames[index];
+      const outputDirectory = join(outputRoot, outputName);
+      const report = JSON.parse(
+        await readFile(join(outputDirectory, "report.json"), "utf8"),
+      );
+      expect(report.input).toBe(expectedInput);
+      expect(report.manualCellSize).toBe(8);
+      expect(report.variants).toHaveLength(3);
+      const previewMetadata = await sharp(
+        join(outputDirectory, "comparativo.png"),
+      ).metadata();
+      expect(previewMetadata).toMatchObject({ width: 400, height: 145 });
+    }
+
+    expect((await readdir(outputRoot)).sort()).toEqual(
+      [...expectedOutputNames].sort(),
+    );
+
+    const customOutputNames = expectedInputs.map((_, index) =>
+      index === 0 ? "custom-results" : `custom-results-${index + 1}`,
+    );
+    const custom = runCli(
+      ["--cell", "8", "--preview", "100", "--out", "custom-results"],
+      batchScriptPath,
+    );
+    expect(custom.status).toBe(0);
+    for (const [index, expectedInput] of expectedInputs.entries()) {
+      const report = JSON.parse(
+        await readFile(
+          join(outputRoot, customOutputNames[index], "report.json"),
+          "utf8",
+        ),
+      );
+      expect(report.input).toBe(expectedInput);
+    }
+    expect((await readdir(outputRoot)).sort()).toEqual(
+      [...expectedOutputNames, ...customOutputNames].sort(),
+    );
+  });
+
+  test("rejects overwrite without changing existing output and errors on no images", async () => {
+    const protectedDirectory = join(
+      batchProjectDirectory,
+      "output",
+      "protected",
+    );
+    await mkdir(protectedDirectory);
+    await writeFile(join(protectedDirectory, "keep.txt"), "keep");
+
+    const overwrite = runCli(
+      ["--out", "protected", "--overwrite"],
+      batchScriptPath,
+    );
+    expect(overwrite.status).not.toBe(0);
+    expect(overwrite.stderr).toContain(
+      "--overwrite não é compatível com o processamento em lote",
+    );
+    expect(await readFile(join(protectedDirectory, "keep.txt"), "utf8")).toBe(
+      "keep",
+    );
+
+    const empty = runCli([], emptyBatchScriptPath);
+    expect(empty.status).not.toBe(0);
+    expect(empty.stderr).toContain(
+      "Nenhuma imagem compatível foi encontrada diretamente em ./input",
+    );
+    expect(await readdir(join(emptyBatchProjectDirectory, "output"))).toEqual(
+      [],
+    );
   });
 });
