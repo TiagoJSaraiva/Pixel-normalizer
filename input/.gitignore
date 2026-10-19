@@ -3,5 +3,10 @@
 *.jpeg
 *.gif
 *.bmp
+*.tif
 *.tiff
 *.ico
+*.webp
+*.avif
+*.heic
+*.heif

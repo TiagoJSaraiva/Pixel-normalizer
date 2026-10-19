@@ -7,12 +7,14 @@
  * preview comparativo e report.json. Tudo neste arquivo, sem serviços externos.
  */
 import sharp, { type OverlayOptions } from "sharp";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface Options {
   input: string;
   out: string;
+  overwrite: boolean;
   minCell: number;
   maxCell: number;
   grids: number;
@@ -41,24 +43,37 @@ interface GridFit {
 }
 type Strategy = "dominante" | "mediana" | "centro";
 
-function parseOptions(argv: string[]): Options {
-  if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
-    console.log(`Uso: bun run pixel-normalizer.ts <imagem> [opções]
+const PROJECT_ROOT = dirname(fileURLToPath(import.meta.url));
+const INPUT_ROOT = resolve(PROJECT_ROOT, "input");
+const OUTPUT_ROOT = resolve(PROJECT_ROOT, "output");
+
+function printHelp(): void {
+  console.log(`Uso: bun run pixel-normalizer.ts <imagem> [opções]
+
+<imagem> é um caminho relativo à pasta ./input.
 
 Opções:
-  --out <pasta>       Pasta de saída (padrão: ./normalized-output)
-  --min-cell <n>     Menor pixel lógico testado (padrão: 3)
-  --max-cell <n>     Maior pixel lógico testado (padrão: 128)
-  --grids <n>        Quantidade de grades alternativas (padrão: 2)
-  --preview <n>      Largura de cada miniatura (padrão: 360)
+  --out <pasta>       Pasta relativa a ./output (padrão: normalized-output)
+  -o, --overwrite     Recria a pasta base de saída, removendo seu conteúdo
+  --min-cell <n>      Menor pixel lógico testado (padrão: 3)
+  --max-cell <n>      Maior pixel lógico testado (padrão: 128)
+  --grids <n>         Quantidade de grades alternativas (padrão: 2)
+  --preview <n>       Largura de cada miniatura (padrão: 360)
 
+Sem --overwrite, uma saída existente recebe um sufixo numérico crescente.
 Requisitos: bun add sharp
 `);
+}
+
+function parseOptions(argv: string[]): Options {
+  if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
+    printHelp();
     process.exit(0);
   }
   const opts: Options = {
     input: argv[0],
     out: "normalized-output",
+    overwrite: false,
     minCell: 3,
     maxCell: 128,
     grids: 2,
@@ -67,8 +82,15 @@ Requisitos: bun add sharp
   const numeric = new Set(["--min-cell", "--max-cell", "--grids", "--preview"]);
   for (let i = 1; i < argv.length; i++) {
     const key = argv[i];
+    if (key === "-o" || key === "--overwrite") {
+      opts.overwrite = true;
+      continue;
+    }
+    if (key !== "--out" && !numeric.has(key))
+      throw new Error(`Opção desconhecida: ${key}`);
     const value = argv[++i];
-    if (!value) throw new Error(`Falta valor para ${key}`);
+    if (!value || value.startsWith("--") || value === "-o")
+      throw new Error(`Falta valor para ${key}`);
     if (key === "--out") opts.out = value;
     else if (numeric.has(key)) {
       const n = Number(value);
@@ -79,11 +101,82 @@ Requisitos: bun add sharp
       if (key === "--grids") opts.grids = Math.min(5, n);
       if (key === "--preview")
         opts.previewWidth = Math.max(100, Math.min(600, n));
-    } else throw new Error(`Opção desconhecida: ${key}`);
+    }
   }
   if (opts.minCell > opts.maxCell)
     throw new Error("--min-cell deve ser <= --max-cell");
   return opts;
+}
+
+function resolveInside(root: string, userPath: string, label: string): string {
+  if (!userPath || isAbsolute(userPath))
+    throw new Error(
+      `O caminho de ${label} deve ser relativo à pasta correspondente: ${userPath}`,
+    );
+
+  const absoluteRoot = resolve(root);
+  const absolutePath = resolve(absoluteRoot, userPath);
+  const pathFromRoot = relative(absoluteRoot, absolutePath);
+  if (
+    !pathFromRoot ||
+    pathFromRoot === ".." ||
+    pathFromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(pathFromRoot)
+  ) {
+    throw new Error(
+      `O caminho de ${label} deve permanecer dentro da pasta correspondente: ${userPath}`,
+    );
+  }
+  return absolutePath;
+}
+
+function isErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+
+async function reserveOutputDirectory(
+  basePath: string,
+  overwrite: boolean,
+): Promise<string> {
+  const parent = dirname(basePath);
+  const baseName = basename(basePath);
+  await mkdir(parent, { recursive: true });
+
+  if (overwrite) {
+    await rm(basePath, { recursive: true, force: true });
+    await mkdir(basePath);
+    return basePath;
+  }
+
+  while (true) {
+    const entries = await readdir(parent);
+    let largestId = 0;
+    for (const entry of entries) {
+      if (entry === baseName) {
+        largestId = Math.max(largestId, 1);
+        continue;
+      }
+      const prefix = `${baseName}-`;
+      if (!entry.startsWith(prefix)) continue;
+      const suffix = entry.slice(prefix.length);
+      if (!/^\d+$/.test(suffix)) continue;
+      const id = Number(suffix);
+      if (!Number.isSafeInteger(id))
+        throw new Error(`Sufixo numérico fora do limite seguro em ${join(parent, entry)}`);
+      if (id >= 2) largestId = Math.max(largestId, id);
+    }
+
+    const nextId = largestId === 0 ? 1 : largestId + 1;
+    if (!Number.isSafeInteger(nextId))
+      throw new Error(`Não foi possível calcular o próximo sufixo para ${basePath}`);
+    const candidate = nextId === 1 ? basePath : `${basePath}-${nextId}`;
+    try {
+      await mkdir(candidate);
+      return candidate;
+    } catch (error) {
+      if (!isErrorCode(error, "EEXIST")) throw error;
+    }
+  }
 }
 
 async function loadImage(path: string): Promise<RawImage> {
@@ -398,9 +491,11 @@ async function savePreview(
 
 async function main(): Promise<void> {
   const opts = parseOptions(process.argv.slice(2));
-  const image = await loadImage(opts.input);
+  const inputPath = resolveInside(INPUT_ROOT, opts.input, "entrada");
+  const outputBasePath = resolveInside(OUTPUT_ROOT, opts.out, "saída");
+  const image = await loadImage(inputPath);
   const grids = detectGrids(image, opts);
-  await mkdir(opts.out, { recursive: true });
+  const outputPath = await reserveOutputDirectory(outputBasePath, opts.overwrite);
   console.log(`Imagem: ${image.width}x${image.height}`);
   console.log("Grades estimadas:");
   grids.forEach((grid, i) =>
@@ -413,10 +508,10 @@ async function main(): Promise<void> {
   const files: { path: string; label: string }[] = [];
   const previewItems: { path: string; label: string }[] = [];
   for (const [index, grid] of grids.entries()) {
-    previewItems.push({ path: opts.input, label: "Original (referência)" });
+    previewItems.push({ path: inputPath, label: "Original (referência)" });
     for (const strategy of ["dominante", "mediana", "centro"] as const) {
       const name = `grade-${index + 1}-${grid.size}px-${strategy}.png`;
-      const path = join(opts.out, name);
+      const path = join(outputPath, name);
       const raw = normalize(image, grid, strategy);
       await sharp(raw, {
         raw: { width: image.width, height: image.height, channels: 4 },
@@ -433,7 +528,7 @@ async function main(): Promise<void> {
     }
   }
   const report = {
-    input: resolve(opts.input),
+    input: inputPath,
     dimensions: { width: image.width, height: image.height },
     explanation:
       "Offsets indicam as posições das FRONTEIRAS (x mod size, y mod size). " +
@@ -443,13 +538,13 @@ async function main(): Promise<void> {
     variants: files.map((f) => ({ path: resolve(f.path), label: f.label })),
   };
   await writeFile(
-    join(opts.out, "report.json"),
+    join(outputPath, "report.json"),
     JSON.stringify(report, null, 2),
     "utf-8",
   );
-  await savePreview(previewItems, opts, join(opts.out, "comparativo.png"));
+  await savePreview(previewItems, opts, join(outputPath, "comparativo.png"));
   console.log(
-    `\nPronto. Abra ${join(opts.out, "comparativo.png")} para escolher a variante.`,
+    `\nPronto. Abra ${join(outputPath, "comparativo.png")} para escolher a variante.`,
   );
 }
 

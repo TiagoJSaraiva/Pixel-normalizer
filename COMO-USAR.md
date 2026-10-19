@@ -6,8 +6,22 @@ Um único script (`pixel-normalizer.ts`) que tenta detectar o tamanho e o desloc
 
 ```sh
 bun install
-bun run pixel-normalizer.ts "minha-imagem.png" --out ./resultado
+bun run pixel-normalizer.ts "minha-imagem.png"
+bun run pixel-normalizer.ts "minha-imagem.png" --out ./forja
 ```
+
+Coloque as imagens em `input/`. O argumento da imagem é relativo a essa pasta; por exemplo, `"minha-imagem.png"` lê `input/minha-imagem.png`. Subpastas também são aceitas, como `"personagens/heroi.png"`, desde que permaneçam dentro de `input/`.
+
+Todos os resultados ficam sob `output/`. Sem `--out`, o nome base é `normalized-output`; com `--out ./forja`, o nome base é `forja`. Se uma pasta com esse nome já existir, o script cria a próxima pelo maior sufixo encontrado: com `forja/`, `forja-2/` e `forja-5/`, cria `forja-6/`.
+
+Para substituir a pasta base exata, removendo todo o conteúdo dela, use `--overwrite` ou `-o`:
+
+```sh
+bun run pixel-normalizer.ts "minha-imagem.png" --out ./forja --overwrite
+bun run pixel-normalizer.ts "minha-imagem.png" --out ./forja -o
+```
+
+Com essa opção, o destino é sempre `output/forja`, mesmo que pastas como `output/forja-2/` também existam.
 
 Opções disponíveis:
 
