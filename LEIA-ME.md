@@ -4,15 +4,27 @@ Uma ferramenta de linha de comando em TypeScript que estima a grade lógica de p
 
 [Read this guide in English](README.md).
 
+## Exemplos
+
+Estes são os arquivos `comparativo.png` gerados pela ferramenta.
+
+![Uma bigorna e uma forja: o original ao lado das variantes dominante, mediana e centro em uma grade de 8 px](docs/images/example-forge.png)
+
+Com `--cell 8`, você recebe o original seguido das três estratégias de cor para essa grade.
+
+![Uma textura de pedra: o original ao lado de três variantes em uma grade de 15 px e três em uma grade de 30 px](docs/images/example-stone.png)
+
+No modo automático, é possível comparar grades candidatas. Aqui, a grade de 15 px mantém os detalhes, enquanto a de 30 px fica grosseira demais.
+
 ## Requisitos
 
-- [Bun](https://bun.sh/)
+- [Node.js](https://nodejs.org/) 22.18 ou mais recente, que executa TypeScript diretamente, sem etapa de build
 - Sharp, instalado junto com as dependências do projeto
 
 Instale as dependências na pasta do projeto:
 
 ```sh
-bun install
+npm install
 ```
 
 ## Início rápido
@@ -20,13 +32,13 @@ bun install
 Coloque uma imagem em `input/` e informe o caminho relativo a essa pasta:
 
 ```sh
-bun run pixel-normalizer.ts "minha-imagem.png"
+node pixel-normalizer.ts "minha-imagem.png"
 ```
 
 Para processar todas as imagens compatíveis diretamente em `input/`, omita o nome. Os arquivos são processados na ordem retornada pela leitura da pasta; subpastas são ignoradas. As extensões aceitas são `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tif`, `.tiff`, `.ico`, `.webp`, `.avif`, `.heic` e `.heif`, sem diferenciar maiúsculas de minúsculas.
 
 ```sh
-bun run pixel-normalizer.ts --cell 8
+node pixel-normalizer.ts --cell 8
 ```
 
 Cada imagem recebe sua própria pasta de saída, na mesma ordem: `normalized-output`, `normalized-output-2` e assim por diante. Opções como `--cell`, `--grids` e `--preview` valem para todas as imagens do lote. Se não houver imagens compatíveis diretamente em `input/`, o comando informa um erro.
@@ -34,7 +46,7 @@ Cada imagem recebe sua própria pasta de saída, na mesma ordem: `normalized-out
 Subpastas são aceitas desde que a imagem permaneça dentro de `input/`:
 
 ```sh
-bun run pixel-normalizer.ts "personagens/heroi.png"
+node pixel-normalizer.ts "personagens/heroi.png"
 ```
 
 A imagem precisa ter pelo menos 16 por 16 pixels.
@@ -44,7 +56,7 @@ A imagem precisa ter pelo menos 16 por 16 pixels.
 Os resultados são gravados em `output/`. Por padrão, a pasta usada é `output/normalized-output`. Use `--out` para escolher outro caminho relativo dentro de `output/`:
 
 ```sh
-bun run pixel-normalizer.ts "minha-imagem.png" --out "forja"
+node pixel-normalizer.ts "minha-imagem.png" --out "forja"
 ```
 
 Se a pasta de saída escolhida já existir, o programa cria uma pasta numerada para não substituí-la. Ele usa o próximo número após o maior sufixo numérico existente; por exemplo, se existir `output/forja-5/`, a próxima execução usará `output/forja-6/`.
@@ -54,8 +66,8 @@ No modo em lote, a mesma regra é aplicada uma vez por imagem, mantendo a ordem 
 Para limpar e recriar exatamente a pasta de saída escolhida, use `--overwrite` ou `-o`:
 
 ```sh
-bun run pixel-normalizer.ts "minha-imagem.png" --out "forja" --overwrite
-bun run pixel-normalizer.ts "minha-imagem.png" --out "forja" -o
+node pixel-normalizer.ts "minha-imagem.png" --out "forja" --overwrite
+node pixel-normalizer.ts "minha-imagem.png" --out "forja" -o
 ```
 
 `--overwrite` remove o conteúdo da pasta de saída indicada antes de gravar os novos resultados.
@@ -73,7 +85,7 @@ Por exemplo, um arquivo pode se chamar `grade-1-8px-dominante.png`. No modo auto
 ## Opções do comando
 
 ```text
-bun run pixel-normalizer.ts [<imagem>] [opções]
+node pixel-normalizer.ts [<imagem>] [opções]
 ```
 
 O argumento da imagem é opcional. Sem ele, o comando processa os arquivos de imagem compatíveis diretamente em `input/`.
@@ -95,19 +107,19 @@ Exemplos:
 
 ```sh
 # Definir manualmente o tamanho da célula
-bun run pixel-normalizer.ts "minha-imagem.png" --cell 8
+node pixel-normalizer.ts "minha-imagem.png" --cell 8
 
 # Processar todas as imagens compatíveis diretamente em input/
-bun run pixel-normalizer.ts --cell 8
+node pixel-normalizer.ts --cell 8
 
 # Ampliar a faixa automática e gerar três grades
-bun run pixel-normalizer.ts "minha-imagem.png" --min-cell 2 --max-cell 160 --grids 3
+node pixel-normalizer.ts "minha-imagem.png" --min-cell 2 --max-cell 160 --grids 3
 
 # Criar miniaturas mais largas
-bun run pixel-normalizer.ts "minha-imagem.png" --preview 480
+node pixel-normalizer.ts "minha-imagem.png" --preview 480
 
 # Exibir todas as opções do CLI
-bun run pixel-normalizer.ts --help
+node pixel-normalizer.ts --help
 ```
 
 ## Como funciona
@@ -121,6 +133,6 @@ A detecção e as pontuações são heurísticas. Imagens sem uma grade global c
 
 ## Tecnologia
 
-- TypeScript executado com Bun
+- TypeScript executado diretamente no Node.js
 - Sharp para decodificar imagens e gerar PNGs
 - Não requer Python, OpenCV nem serviço externo de IA

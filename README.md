@@ -4,15 +4,27 @@ A TypeScript command-line tool that estimates the logical pixel grid in AI-gener
 
 [Leia este guia em português](LEIA-ME.md).
 
+## Examples
+
+These are the `comparativo.png` files the tool generates, so their labels are in Portuguese.
+
+![An anvil and a forge: the original next to the dominant, median, and center variants on an 8 px grid](docs/images/example-forge.png)
+
+With `--cell 8`, you get the original followed by the three color strategies for that grid.
+
+![A stone texture: the original next to three variants on a 15 px grid and three on a 30 px grid](docs/images/example-stone.png)
+
+In automatic mode, you can compare candidate grids. Here, the 15 px grid keeps the detail, while the 30 px grid is too coarse.
+
 ## Requirements
 
-- [Bun](https://bun.sh/)
+- [Node.js](https://nodejs.org/) 22.18 or newer, which runs TypeScript directly with no build step
 - Sharp, installed from the project dependencies
 
 Install the dependencies from the project directory:
 
 ```sh
-bun install
+npm install
 ```
 
 ## Quick start
@@ -20,13 +32,13 @@ bun install
 Put an image in `input/`, then pass its path relative to that folder:
 
 ```sh
-bun run pixel-normalizer.ts "my-image.png"
+node pixel-normalizer.ts "my-image.png"
 ```
 
 To process every supported image directly inside `input/`, omit the image name. Files are processed in the order returned by the directory listing; subdirectories are skipped. The supported extensions are `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tif`, `.tiff`, `.ico`, `.webp`, `.avif`, `.heic`, and `.heif` (case-insensitive).
 
 ```sh
-bun run pixel-normalizer.ts --cell 8
+node pixel-normalizer.ts --cell 8
 ```
 
 Each image gets its own output folder in that order: `normalized-output`, `normalized-output-2`, and so on. Options such as `--cell`, `--grids`, and `--preview` apply to every image in the batch. If no supported image is found directly inside `input/`, the command reports an error.
@@ -34,7 +46,7 @@ Each image gets its own output folder in that order: `normalized-output`, `norma
 Subdirectories are supported as long as the image stays inside `input/`:
 
 ```sh
-bun run pixel-normalizer.ts "characters/hero.png"
+node pixel-normalizer.ts "characters/hero.png"
 ```
 
 The image must be at least 16 by 16 pixels.
@@ -44,7 +56,7 @@ The image must be at least 16 by 16 pixels.
 Results are written under `output/`. By default, the output folder is `output/normalized-output`. Use `--out` to choose another relative path inside `output/`:
 
 ```sh
-bun run pixel-normalizer.ts "my-image.png" --out "forge"
+node pixel-normalizer.ts "my-image.png" --out "forge"
 ```
 
 If the requested output folder already exists, the program chooses a numbered folder to avoid replacing it. It uses the next number after the highest existing numeric suffix; for example, if `output/forge-5/` exists, the next run uses `output/forge-6/`.
@@ -54,8 +66,8 @@ In batch mode, the same rule is applied once per image, preserving the input lis
 To clear and recreate the exact requested output folder, use `--overwrite` or `-o`:
 
 ```sh
-bun run pixel-normalizer.ts "my-image.png" --out "forge" --overwrite
-bun run pixel-normalizer.ts "my-image.png" --out "forge" -o
+node pixel-normalizer.ts "my-image.png" --out "forge" --overwrite
+node pixel-normalizer.ts "my-image.png" --out "forge" -o
 ```
 
 `--overwrite` removes the contents of that exact output folder before writing new results.
@@ -73,7 +85,7 @@ For example, a result can be named `grade-1-8px-dominante.png`. In automatic mod
 ## Command options
 
 ```text
-bun run pixel-normalizer.ts [<image>] [options]
+node pixel-normalizer.ts [<image>] [options]
 ```
 
 The image argument is optional. Without it, the command processes supported image files directly in `input/`.
@@ -95,19 +107,19 @@ Examples:
 
 ```sh
 # Choose a cell size manually
-bun run pixel-normalizer.ts "my-image.png" --cell 8
+node pixel-normalizer.ts "my-image.png" --cell 8
 
 # Process every supported image directly in input/
-bun run pixel-normalizer.ts --cell 8
+node pixel-normalizer.ts --cell 8
 
 # Search a wider automatic range and produce three grids
-bun run pixel-normalizer.ts "my-image.png" --min-cell 2 --max-cell 160 --grids 3
+node pixel-normalizer.ts "my-image.png" --min-cell 2 --max-cell 160 --grids 3
 
 # Make wider thumbnails
-bun run pixel-normalizer.ts "my-image.png" --preview 480
+node pixel-normalizer.ts "my-image.png" --preview 480
 
 # Print all CLI options
-bun run pixel-normalizer.ts --help
+node pixel-normalizer.ts --help
 ```
 
 ## How it works
@@ -121,6 +133,6 @@ Grid detection and scores are heuristic. Images without a consistent global grid
 
 ## Technology
 
-- TypeScript running on Bun
+- TypeScript running directly on Node.js
 - Sharp for image decoding and PNG output
 - No Python, OpenCV, or external AI service is required
