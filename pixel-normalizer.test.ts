@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import sharp from "sharp";
 import {
   copyFile,
@@ -12,7 +12,7 @@ import {
 import { spawnSync } from "node:child_process";
 import { extname, join, relative } from "node:path";
 
-const projectRoot = import.meta.dir;
+const projectRoot = import.meta.dirname;
 const inputRoot = join(projectRoot, "input");
 const inputDirectory = await mkdtemp(join(inputRoot, ".cell-tests-"));
 const inputPath = join(inputDirectory, "fixture.png");
@@ -40,7 +40,7 @@ function runCli(
 ) {
   return spawnSync(
     process.execPath,
-    ["run", scriptPath, ...args],
+    [scriptPath, ...args],
     { encoding: "utf8" },
   );
 }

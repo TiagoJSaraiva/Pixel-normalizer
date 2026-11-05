@@ -1,7 +1,7 @@
 /**
  * Pixel Normalizer — corrige pixels simulados por IA usando grade lógica automática.
- * Requisitos: Bun + Sharp  |  bun add sharp
- * Exemplo: bun run pixel-normalizer.ts "imagem.png" --out ./resultado
+ * Requisitos: Node.js 22.18+ e Sharp  |  npm install
+ * Exemplo: node pixel-normalizer.ts "imagem.png" --out ./resultado
  *
  * Gera: variantes (dominante, mediana, centro) para as grades selecionadas,
  * preview comparativo e report.json. Tudo neste arquivo, sem serviços externos.
@@ -73,7 +73,7 @@ const IMAGE_EXTENSIONS = new Set([
 ]);
 
 function printHelp(): void {
-  console.log(`Uso: bun run pixel-normalizer.ts [<imagem>] [opções]
+  console.log(`Uso: node pixel-normalizer.ts [<imagem>] [opções]
 
 <imagem> é um caminho relativo à pasta ./input. Sem esse argumento, todas as
 imagens compatíveis diretamente em ./input são processadas em sequência.
@@ -88,7 +88,7 @@ Opções:
   --preview <n>       Largura de cada miniatura (padrão: 360)
 
 Sem --overwrite, uma saída existente recebe um sufixo numérico crescente.
-Requisitos: bun add sharp
+Requisitos: Node.js 22.18+ e npm install
 `);
 }
 
